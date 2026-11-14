@@ -431,6 +431,27 @@ def fetch_thread(cl: Client, thread_id: str):
 # --------------------------------------------------------------------------- #
 # Message storage
 # --------------------------------------------------------------------------- #
+def sync_thread_silently(cl: Client, mem: Memory, thread_id: str, username: str) -> None:
+    """Startup pe live thread padho aur last_ts latest message pe set karo.
+
+    Isse restart ke baad purane messages ko dobara reply nahi karta (duplicate
+    replies se bachne ke liye). Memory phir bhi save hoti hai.
+    """
+    thread = fetch_thread(cl, thread_id)
+    self_id = str(cl.user_id)
+    users = {str(u.pk): u.username for u in thread.users}
+    store_messages(mem, thread, users, self_id, username)
+
+    if mem.get_thread(thread_id) is None:
+        title = getattr(thread, "thread_title", "") or ""
+        mem.add_thread(thread_id, title, time.time())
+
+    if not thread.messages:
+        return
+    latest = max(thread.messages, key=lambda m: m.timestamp)
+    mem.set_last_ts(thread_id, latest.timestamp.timestamp(), latest.id)
+
+
 def store_messages(
     mem: Memory, thread, users: dict[str, str], self_id: str, self_username: str
 ) -> None:
@@ -726,6 +747,7 @@ def process_thread(
 # Render / cloud hosting
 # --------------------------------------------------------------------------- #
 BOT_STATE: dict[str, Any] = {
+    "code": "v3-greeting-sync",
     "started": time.time(),
     "logged_in": False,
     "username": "",
@@ -986,6 +1008,13 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     for tid in thread_ids:
         mem.backfill_people(tid, exclude_user_id=cl.user_id)
+
+    # Restart ke baad purane messages ko dobara reply mat karo (duplicate se bachne ke liye)
+    for tid in thread_ids:
+        try:
+            sync_thread_silently(cl, mem, tid, username)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[{tid}] startup sync failed: {exc}")
 
     rng = random.Random()
     dry = args.dry_run
