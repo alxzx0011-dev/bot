@@ -311,6 +311,21 @@ def is_mentioned(text: str, username: str) -> bool:
     return bool(username) and re.search(rf"@{re.escape(username)}\b", text, re.I) is not None
 
 
+GREETING_WORDS = re.compile(
+    r"\b(hi+|hey+|hello+|hlo+|hlw|namaste|namaskar|salaam|salam|yo|sup|hola|"
+    r"gm|good morning|good afternoon|good evening|good night|gn|"
+    r"kya haal|kaise ho|kaisi ho|kya chal raha|whats up|what's up|wassup|"
+    r"oye|oi|abe|sun|suno)\b",
+    re.I,
+)
+
+BOT_NAME_WORDS = re.compile(r"\b(riya|bot|boti|botu)\b", re.I)
+
+
+def is_greeting(text: str) -> bool:
+    return bool(GREETING_WORDS.search(text))
+
+
 def should_reply(text: str, username: str, rng: random.Random) -> bool:
     if REPLY_MODE == "off":
         return False
@@ -319,7 +334,10 @@ def should_reply(text: str, username: str, rng: random.Random) -> bool:
         return mentioned
     if REPLY_MODE == "all":
         return True
-    if mentioned or is_question(text):
+    # Greeting aur naam pe pakka reply — warna group me bot "dead" lagta hai
+    if mentioned or is_greeting(text) or BOT_NAME_WORDS.search(text):
+        return True
+    if is_question(text):
         return True
     return rng.random() < ACTIVE_CHANCE
 
@@ -628,6 +646,12 @@ def process_thread(
     if not new:
         maybe_wake(cl, mem, thread_id, users, self_id, username, dry, rng)
         return
+    BOT_STATE["last_seen"] = {
+        "thread": thread_id,
+        "user": new[-1]["username"],
+        "text": new[-1]["text"][:120],
+        "ts": new[-1]["ts"],
+    }
     last_new = max(new, key=lambda m: (m["ts"], len(m["message_id"]), m["message_id"]))
     mem.set_last_ts(thread_id, last_new["ts"], last_new["message_id"])
 
@@ -652,12 +676,14 @@ def process_thread(
     text = candidate["text"].strip()
 
     if not should_reply(text, username, rng):
-        print(f"[{thread_id}] skip (question/mention nahi): {text[:40]}")
+        print(f"[{thread_id}] skip (random 55%): {text[:40]}")
+        BOT_STATE["last_action"] = f"skip-random: {text[:40]}"
         return
 
     now = time.time()
     if now - mem.last_reply_ts(thread_id) < REPLY_GAP:
         print(f"[{thread_id}] skip (reply gap {REPLY_GAP:.0f}s)")
+        BOT_STATE["last_action"] = "skip-gap"
         return
 
     reply = build_reply(mem, thread_id, text, username) or rng.choice(FALLBACK_LINES)
@@ -666,6 +692,7 @@ def process_thread(
 
     print(f"[{thread_id}] {candidate['username']}: {text[:80]}")
     print(f"[{thread_id}] -> {reply}")
+    BOT_STATE["last_action"] = f"reply: {reply[:60]}"
 
     # human jaisa typing delay
     delay = rng.uniform(TYPING_MIN, TYPING_MAX) + min(4.0, len(reply) * 0.05)
@@ -703,13 +730,16 @@ BOT_STATE: dict[str, Any] = {
     "logged_in": False,
     "username": "",
     "last_poll": 0.0,
+    "last_seen": None,
+    "last_action": "",
+    "messages_total": 0,
 }
 
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path == "/status":
+        if path in ("/status", "/diag"):
             body = json.dumps(BOT_STATE).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -782,36 +812,59 @@ def restore_db_from_gist() -> None:
     if DB_FILE.exists() and DB_FILE.stat().st_size > 0:
         return
 
+    for attempt in range(1, 11):
+        try:
+            r = httpx.get(
+                f"https://api.github.com/gists/{GIST_ID}",
+                headers=gist_headers(),
+                timeout=20,
+            )
+            r.raise_for_status()
+            info = (r.json().get("files") or {}).get(GIST_FILE)
+            if not info:
+                print("[backup] gist me backup nahi mila")
+                return
+
+            content = info.get("content") or ""
+            if info.get("truncated") and info.get("raw_url"):
+                raw = httpx.get(info["raw_url"], timeout=30)
+                raw.raise_for_status()
+                content = raw.text
+            content = "".join(content.split())
+            if len(content) < 100:
+                # Placeholder ya adhoora backup — thoda wait karke dobara try
+                print(f"[backup] gist backup chhota hai ({len(content)} chars), retry {attempt}/10")
+                time.sleep(5)
+                continue
+
+            data = base64.b64decode(content, validate=True)
+            if not data.startswith(b"SQLite format 3\x00"):
+                print("[backup] gist backup valid SQLite nahi hai, retry")
+                time.sleep(5)
+                continue
+
+            DB_FILE.write_bytes(data)
+            print(f"[backup] memory restored from gist ({len(data)} bytes)")
+            return
+        except Exception as exc:  # noqa: BLE001 - bot ko backup ki wajah se mat roko
+            print(f"[backup] restore failed (try {attempt}/10): {exc}")
+            time.sleep(5)
+
+
+def db_has_messages(mem: Memory) -> bool:
     try:
-        r = httpx.get(
-            f"https://api.github.com/gists/{GIST_ID}",
-            headers=gist_headers(),
-            timeout=20,
-        )
-        r.raise_for_status()
-        info = (r.json().get("files") or {}).get(GIST_FILE)
-        if not info:
-            print("[backup] gist me backup nahi mila")
-            return
-
-        content = info.get("content") or ""
-        if info.get("truncated") and info.get("raw_url"):
-            raw = httpx.get(info["raw_url"], timeout=30)
-            raw.raise_for_status()
-            content = raw.text
-        if not content.strip():
-            print("[backup] gist backup khali hai")
-            return
-
-        DB_FILE.write_bytes(base64.b64decode(content))
-        print(f"[backup] memory restored from gist ({DB_FILE.stat().st_size} bytes)")
-    except Exception as exc:  # noqa: BLE001 - bot ko backup ki wajah se mat roko
-        print(f"[backup] restore failed: {exc}")
+        return mem.total_messages() > 0
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def backup_db_to_gist(mem: Memory) -> None:
     """SQLite ko checkpoint karke Gist me base64 save karo."""
     if not gist_ready():
+        return
+    # Khali DB kabhi upload mat karo — warna acchi memory ud jayegi
+    if not db_has_messages(mem):
+        print("[backup] skip (DB khali hai)")
         return
     try:
         mem.checkpoint()
@@ -966,6 +1019,7 @@ def cmd_run(args: argparse.Namespace) -> None:
                     print(f"[{tid}] error: {exc}")
 
             BOT_STATE["last_poll"] = time.time()
+            BOT_STATE["messages_total"] = mem.total_messages()
 
             if args.once:
                 return

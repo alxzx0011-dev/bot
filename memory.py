@@ -216,6 +216,10 @@ class Memory:
         ).fetchone()
         return int(row["n"])
 
+    def total_messages(self) -> int:
+        row = self.conn.execute("SELECT COUNT(*) AS n FROM messages").fetchone()
+        return int(row["n"])
+
     # ------------------------------------------------------------------ #
     # Replies / rate limiting
     # ------------------------------------------------------------------ #
