@@ -1,0 +1,77 @@
+services:
+  - type: web
+    name: bot
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py serve
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: TZ
+        value: Asia/Kolkata
+      - key: BOT_TIMEZONE
+        value: Asia/Kolkata
+
+      # --- Instagram ---
+      - key: IG_USERNAME
+        value: wolf54211
+      - key: IG_SESSIONID
+        sync: false  # Render dashboard me paste karo (secret)
+      - key: THREAD_IDS
+        sync: false  # Render dashboard me paste karo (group id)
+
+      # --- Reply behaviour ---
+      - key: REPLY_MODE
+        value: smart
+      - key: ACTIVE_CHANCE
+        value: "0.45"
+      - key: REPLY_GAP_SECONDS
+        value: "45"
+      - key: TYPING_MIN_SECONDS
+        value: "3"
+      - key: TYPING_MAX_SECONDS
+        value: "10"
+      - key: POLL_MIN_SECONDS
+        value: "3"
+      - key: POLL_MAX_SECONDS
+        value: "6"
+
+      # --- Wake-up ---
+      - key: WAKE_AFTER_MINUTES
+        value: "45"
+      - key: WAKE_MIN_GAP_MINUTES
+        value: "120"
+      - key: WAKE_MAX_PER_DAY
+        value: "3"
+      - key: WAKE_HOUR_START
+        value: "9"
+      - key: WAKE_HOUR_END
+        value: "24"
+
+      # --- Memory ---
+      - key: DB_PATH
+        value: memory.db
+      - key: HISTORY_LIMIT
+        value: "25"
+      - key: SUMMARY_EVERY
+        value: "60"
+      - key: SUMMARY_KEEP
+        value: "80"
+
+      # --- LLM (Groq, free) ---
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: qwen/qwen3.8-27b
+      - key: LLM_API_KEY
+        sync: false  # Render dashboard me paste karo (secret)
+      - key: LLM_TIMEOUT_SECONDS
+        value: "8"
+
+      # Render free service ko 15 min idle pe sleep hone se bachao
+      - key: SELF_PING_SECONDS
+        value: "600"
