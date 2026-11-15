@@ -75,8 +75,8 @@ def env_float(key: str, default: float) -> float:
         return default
 
 
-POLL_MIN = env_float("POLL_MIN_SECONDS", 3)
-POLL_MAX = env_float("POLL_MAX_SECONDS", 6)
+POLL_MIN = env_float("POLL_MIN_SECONDS", 8)
+POLL_MAX = env_float("POLL_MAX_SECONDS", 15)
 
 ACTIVE_CHANCE = env_float("ACTIVE_CHANCE", 0.45)
 REPLY_MODE = env("REPLY_MODE", "smart").lower()  # smart | mention | all | off
@@ -743,6 +743,7 @@ def process_thread(
 # --------------------------------------------------------------------------- #
 BOT_STATE: dict[str, Any] = {
     "code": "v4-cute-every-message",
+    "error": "",
     "started": time.time(),
     "logged_in": False,
     "username": "",
@@ -1037,10 +1038,20 @@ def cmd_run(args: argparse.Namespace) -> None:
                     time.sleep(wait)
                 except LoginRequired:
                     print("[run] session expired, login again...")
-                    cl = do_login(cl)
-                    BOT_STATE["logged_in"] = True
+                    BOT_STATE["logged_in"] = False
+                    BOT_STATE["error"] = "login_required"
+                    try:
+                        cl = do_login(cl)
+                        BOT_STATE["logged_in"] = True
+                        BOT_STATE["error"] = ""
+                    except Exception as exc:  # noqa: BLE001
+                        # Instagram block/expired session — hammer mat karo
+                        BOT_STATE["error"] = f"login failed: {exc}"
+                        print(f"[run] login failed: {exc} — 180s wait")
+                        time.sleep(180)
                 except Exception as exc:  # noqa: BLE001
                     print(f"[{tid}] error: {exc}")
+                    BOT_STATE["error"] = str(exc)[:160]
 
             BOT_STATE["last_poll"] = time.time()
             BOT_STATE["messages_total"] = mem.total_messages()
