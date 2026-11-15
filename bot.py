@@ -82,9 +82,9 @@ ACTIVE_CHANCE = env_float("ACTIVE_CHANCE", 0.45)
 REPLY_MODE = env("REPLY_MODE", "smart").lower()  # smart | mention | all | off
 
 # Human jaisa behaviour
-REPLY_GAP = env_float("REPLY_GAP_SECONDS", 45)
-TYPING_MIN = env_float("TYPING_MIN_SECONDS", 3)
-TYPING_MAX = env_float("TYPING_MAX_SECONDS", 10)
+REPLY_GAP = env_float("REPLY_GAP_SECONDS", 15)
+TYPING_MIN = env_float("TYPING_MIN_SECONDS", 2)
+TYPING_MAX = env_float("TYPING_MAX_SECONDS", 6)
 
 # Group idle ho to sabko tag karke ping
 WAKE_AFTER = env_int("WAKE_AFTER_MINUTES", 45) * 60
@@ -138,25 +138,25 @@ plans, running jokes aur nicknames zaroor yaad rakho.
 Sirf summary do, koi extra baat nahi."""
 
 FALLBACK_LINES = [
-    "arre yaar 😂 tu bata?",
-    "hmm interesting 👀 kya scene hai?",
-    "mujhe bhi batao na 😜",
-    "wait kya? 😂 phir kya hua?",
-    "haha sahi bola 😂 aur?",
-    "chai pe charcha karein? ☕",
-    "okay okay, samajh gayi 😅 tu bata?",
-    "ye toh next level hai 🔥 aur?",
-    "sach me? 👀 phir?",
-    "lol 😅 tu kya karta hai?",
+    "arre yaar 🌸 tu bata na?",
+    "hmm interesting 🦋 kya scene hai?",
+    "mujhe bhi batao na 🌷",
+    "wait kya? 🥰 phir kya hua?",
+    "achha achha 😊 aur batao?",
+    "chai pe charcha karein? 🌸",
+    "samajh gayi ✨ tum kya karte ho?",
+    "ye toh mast hai 💕 aur?",
+    "sach me? 🦋 phir kya hua?",
+    "haha cute 🌼 tumhara din kaisa tha?",
 ]
 
 WAKE_TEXTS = [
-    "{tags} kaha gayab ho sab? 👀",
-    "{tags} itni si baat pe group dead? 😴",
-    "{tags} chai break lo, kuch baat karo ☕",
-    "{tags} sab so gaye kya? 😭",
-    "{tags} koi hai yahan? 👀",
-    "{tags} itna sannata kyun hai bhai 😂",
+    "{tags} kaha gayab ho sab? 🌸",
+    "{tags} itni si baat pe group silent? 🦋",
+    "{tags} chai break lo, kuch baat karein? 🌷",
+    "{tags} sab so gaye kya? 🥰",
+    "{tags} koi hai yahan? ✨",
+    "{tags} itna sannata kyun hai? 💕",
 ]
 
 
@@ -300,7 +300,7 @@ INTRO_RE = re.compile(
     r"\b(intro|kaun ho|kon ho|kaun hai|kon hai|aap kon|tum kon|who are you|about you|tumhara naam|apna naam)\b",
     re.I,
 )
-INTRO_TEXT = "Hi, main Riya 😜 Pune se, 18 ki. Chai + memes ki bhookhi. Tum batao, tumhara intro?"
+INTRO_TEXT = "Hi, main Riya 🌸 Pune se, 18 ki. Chai aur barish ki fan. Tum batao, tumhara intro?"
 
 
 def is_question(text: str) -> bool:
@@ -332,14 +332,8 @@ def should_reply(text: str, username: str, rng: random.Random) -> bool:
     mentioned = is_mentioned(text, username)
     if REPLY_MODE == "mention":
         return mentioned
-    if REPLY_MODE == "all":
-        return True
-    # Greeting aur naam pe pakka reply — warna group me bot "dead" lagta hai
-    if mentioned or is_greeting(text) or BOT_NAME_WORDS.search(text):
-        return True
-    if is_question(text):
-        return True
-    return rng.random() < ACTIVE_CHANCE
+    # smart/all: har text message ka reply (koi random skip nahi)
+    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -541,7 +535,8 @@ def build_reply(mem: Memory, thread_id: str, last_text: str, self_username: str 
     user = (
         "Group ki recent messages:\n" + "\n".join(context) + extra +
         f"\n\nAb is message ka chhota funny reply do -> {last_text}\n"
-        "Sirf 1 line, 3-12 words, Hinglish, aur end me ek chhota sawaal poochho." + vibe
+        "Sirf 1 line, 3-12 words, Hinglish, soft aur pyaari tone, ek cute emoji, "
+        "aur end me ek chhota sawaal poochho." + vibe
     )
 
     text = llm_chat(system, user, max_tokens=60, temperature=0.8)
@@ -747,7 +742,7 @@ def process_thread(
 # Render / cloud hosting
 # --------------------------------------------------------------------------- #
 BOT_STATE: dict[str, Any] = {
-    "code": "v3-greeting-sync",
+    "code": "v4-cute-every-message",
     "started": time.time(),
     "logged_in": False,
     "username": "",
